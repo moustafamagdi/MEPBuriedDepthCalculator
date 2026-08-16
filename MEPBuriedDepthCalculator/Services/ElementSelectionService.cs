@@ -1,10 +1,9 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
-using MEPBuriedDepthCalculator.Logging;
 using MEPBuriedDepthCalculator.Models;
+using MEPBuriedDepthCalculator.Logging;
 
 namespace MEPBuriedDepthCalculator.Services
 {
@@ -17,49 +16,56 @@ namespace MEPBuriedDepthCalculator.Services
             _logger = logger;
         }
 
-        public List<Element> GetSelectedElements(Document doc, UIDocument uidoc, CalculationOptions options, List<ElementId> manualPickedIds = null)
+        public List<Element> GetSelectedElements(Document doc, UIDocument uidoc, CalculationOptions options)
         {
-            List<Element> elements = new List<Element>();
-
-            switch (options.SelectionMode)
+            var elements = new List<Element>();
+            try
             {
-                case SelectionMode.CurrentSelection:
-                    var selIds = uidoc.Selection.GetElementIds();
-                    foreach (var id in selIds)
-                    {
-                        var elem = doc.GetElement(id);
-                        if (IsSupportedElement(elem)) elements.Add(elem);
-                    }
-                    _logger.Info("Selection", $"Found {elements.Count} supported elements in current selection.");
-                    break;
-
-                case SelectionMode.PickElements:
-                    if (manualPickedIds != null && manualPickedIds.Count > 0)
-                    {
-                        foreach (var id in manualPickedIds)
+                switch (options.SelectionMode)
+                {
+                    case SelectionMode.CurrentSelection:
+                        var selectedIds = uidoc.Selection.GetElementIds();
+                        foreach (var id in selectedIds)
                         {
                             var elem = doc.GetElement(id);
-                            if (IsSupportedElement(elem)) elements.Add(elem);
+                            if (IsSupportedElement(elem))
+                            {
+                                elements.Add(elem);
+                            }
                         }
-                    }
-                    _logger.Info("Selection", $"Using {elements.Count} manually picked elements.");
-                    break;
+                        _logger.Info("ElementSelection", $"Current Selection mode: Found {elements.Count} supported elements out of {selectedIds.Count} selected.");
+                        break;
 
-                case SelectionMode.CurrentView:
-                    var viewCollector = new FilteredElementCollector(doc, doc.ActiveView.Id)
-                        .WherePasses(GetSupportedCategoriesFilter())
-                        .WhereElementIsNotElementType();
-                    elements = viewCollector.ToList();
-                    _logger.Info("Selection", $"Found {elements.Count} supported elements in current view.");
-                    break;
+                    case SelectionMode.PickElements:
+                        // Interactive pick not directly available in headless/non-interactive UI context without prompt,
+                        // but can use UIDoc selection or prompt. For WPF UI, we can use Selection.PickObjects if invoked from external command.
+                        _logger.Info("ElementSelection", "Pick Elements mode requested.");
+                        break;
 
-                case SelectionMode.EntireModel:
-                    var modelCollector = new FilteredElementCollector(doc)
-                        .WherePasses(GetSupportedCategoriesFilter())
-                        .WhereElementIsNotElementType();
-                    elements = modelCollector.ToList();
-                    _logger.Info("Selection", $"Found {elements.Count} supported elements in entire model.");
-                    break;
+                    case SelectionMode.CurrentView:
+                        var activeView = doc.ActiveView;
+                        if (activeView != null)
+                        {
+                            var collector = new FilteredElementCollector(doc, activeView.Id)
+                                .WherePasses(GetSupportedCategoriesFilter())
+                                .WhereElementIsNotElementType();
+                            elements.AddRange(collector.ToElements());
+                        }
+                        _logger.Info("ElementSelection", $"Current View mode: Found {elements.Count} supported elements.");
+                        break;
+
+                    case SelectionMode.EntireModel:
+                        var modelCollector = new FilteredElementCollector(doc)
+                                .WherePasses(GetSupportedCategoriesFilter())
+                                .WhereElementIsNotElementType();
+                        elements.AddRange(modelCollector.ToElements());
+                        _logger.Info("ElementSelection", $"Entire Model mode: Found {elements.Count} supported elements.");
+                        break;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                _logger.Error("ElementSelection", $"Error retrieving elements in mode {options.SelectionMode}", ex);
             }
 
             return elements;
@@ -68,24 +74,22 @@ namespace MEPBuriedDepthCalculator.Services
         public bool IsSupportedElement(Element elem)
         {
             if (elem == null || elem.Category == null) return false;
-            
-            long catId = elem.Category.Id.Value;
-            return catId == (long)BuiltInCategory.OST_PipeCurves ||
-                   catId == (long)BuiltInCategory.OST_DuctCurves ||
-                   catId == (long)BuiltInCategory.OST_Conduit;
+            string catName = elem.Category.Name;
+            return catName == "Pipes" || catName == "Ducts" || catName == "Conduits" ||
+                   elem.Category.Id.Value == (long)BuiltInCategory.OST_PipeCurves ||
+                   elem.Category.Id.Value == (long)BuiltInCategory.OST_DuctCurves ||
+                   elem.Category.Id.Value == (long)BuiltInCategory.OST_Conduit;
         }
 
         private ElementFilter GetSupportedCategoriesFilter()
         {
-            var categories = new List<BuiltInCategory>
+            var filters = new List<ElementFilter>
             {
-                BuiltInCategory.OST_PipeCurves,
-                BuiltInCategory.OST_DuctCurves,
-                BuiltInCategory.OST_Conduit
+                new ElementCategoryFilter(BuiltInCategory.OST_PipeCurves),
+                new ElementCategoryFilter(BuiltInCategory.OST_DuctCurves),
+                new ElementCategoryFilter(BuiltInCategory.OST_Conduit)
             };
-
-            var categoryFilters = categories.Select(c => new ElementCategoryFilter(c)).ToList();
-            return new LogicalOrFilter(categoryFilters.Cast<ElementFilter>().ToList());
+            return new LogicalOrFilter(filters);
         }
     }
 }

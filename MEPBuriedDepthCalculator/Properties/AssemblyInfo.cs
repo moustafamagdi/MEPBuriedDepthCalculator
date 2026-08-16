@@ -5,8 +5,8 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDescription("Revit 2024 MEP Buried Depth Calculator Add-in")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Hatco")]
-[assembly: AssemblyProduct("Hatco MEP Buried Depth Calculator")]
-[assembly: AssemblyCopyright("Copyright © Hatco 2026")]
+[assembly: AssemblyProduct("MEPBuriedDepthCalculator")]
+[assembly: AssemblyCopyright("Copyright © 2026")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

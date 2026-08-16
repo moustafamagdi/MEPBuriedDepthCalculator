@@ -14,6 +14,17 @@ using MEPBuriedDepthCalculator.Services;
 
 namespace MEPBuriedDepthCalculator.UI
 {
+    /// <summary>Display row for the Per-Element Results grid — pre-formatted for binding.</summary>
+    public class ElementResultRow
+    {
+        public string ElementIdText { get; set; }
+        public string CategoryName { get; set; }
+        public string StatusText { get; set; }
+        public string StartDepthText { get; set; }
+        public string EndDepthText { get; set; }
+        public string NotesText { get; set; }
+    }
+
     public class RelayCommand : ICommand
     {
         private readonly Action _execute;
@@ -53,8 +64,11 @@ namespace MEPBuriedDepthCalculator.UI
         private LinkedModelInfo _selectedLink;
         private string _parameterStatusText = "Status: Not Verified";
         private string _summaryText = "Ready to calculate.";
+        private bool _parametersVerified;
+        private bool _isBusy;
 
         public ObservableCollection<LinkedModelInfo> AvailableLinks { get; set; } = new ObservableCollection<LinkedModelInfo>();
+        public ObservableCollection<ElementResultRow> ResultRows { get; set; } = new ObservableCollection<ElementResultRow>();
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -99,6 +113,14 @@ namespace MEPBuriedDepthCalculator.UI
             get => _summaryText;
             set { _summaryText = value; OnPropertyChanged(nameof(SummaryText)); }
         }
+
+        public bool IsBusy
+        {
+            get => _isBusy;
+            set { _isBusy = value; OnPropertyChanged(nameof(IsBusy)); OnPropertyChanged(nameof(CalculateButtonText)); }
+        }
+
+        public string CalculateButtonText => IsBusy ? "Calculating..." : "Calculate & Update Depths";
 
         public ICommand RefreshLinksCommand { get; }
         public ICommand EnsureParametersCommand { get; }
@@ -157,6 +179,10 @@ namespace MEPBuriedDepthCalculator.UI
 
         private void RefreshLinks()
         {
+            // Remember the previously selected link's InstanceId (not the object reference,
+            // which becomes stale/orphaned the moment AvailableLinks is rebuilt below).
+            ElementId previousInstanceId = _selectedLink?.InstanceId;
+
             AvailableLinks.Clear();
             var linkService = new LinkedModelService(_logger);
             var links = linkService.GetRevitLinks(_doc);
@@ -164,37 +190,61 @@ namespace MEPBuriedDepthCalculator.UI
             {
                 AvailableLinks.Add(l);
             }
-            if (AvailableLinks.Count > 0)
+
+            // Re-select by matching InstanceId against the new collection, since the old
+            // LinkedModelInfo instance is no longer reference-equal to anything in the list.
+            var rematch = previousInstanceId != null
+                ? AvailableLinks.FirstOrDefault(l => l.InstanceId == previousInstanceId)
+                : null;
+
+            if (rematch != null)
             {
-                if (SelectedLink == null)
-                {
-                    SelectedLink = AvailableLinks[0];
-                }
-                else
-                {
-                    // Re-match existing selection by InstanceId
-                    var matched = AvailableLinks.FirstOrDefault(l => l.InstanceId.Value == SelectedLink.InstanceId.Value);
-                    SelectedLink = matched ?? AvailableLinks[0];
-                }
+                SelectedLink = rematch;
             }
+            else if (AvailableLinks.Count > 0)
+            {
+                SelectedLink = AvailableLinks[0];
+            }
+            else
+            {
+                SelectedLink = null;
+            }
+
             _logger.Info("LinkSelection", $"Refreshed links list. Found {AvailableLinks.Count} links.");
         }
 
         private void EnsureParametersAction(UIApplication uiapp)
+        {
+            EnsureParametersInternal(uiapp, showDialogOnSuccess: true);
+        }
+
+        /// <summary>
+        /// Verifies/binds the shared parameters. Returns true on success. Used both by the
+        /// explicit "Ensure Parameters" button and automatically at the start of Calculate,
+        /// so a user who forgets to click it first doesn't silently get unwritten parameters.
+        /// </summary>
+        private bool EnsureParametersInternal(UIApplication uiapp, bool showDialogOnSuccess)
         {
             var doc = uiapp.ActiveUIDocument.Document;
             var paramService = new SharedParameterService(_logger);
             if (paramService.EnsureSharedParametersExist(doc, out string msg))
             {
                 ParameterStatusText = "Status: Verified & Bound";
+                _parametersVerified = true;
                 SummaryText = "Shared parameters successfully verified.";
-                TaskDialog.Show(Constants.AddInName, "Shared parameters are ready.");
+                if (showDialogOnSuccess)
+                {
+                    TaskDialog.Show(Constants.AddInName, "Shared parameters are ready.");
+                }
+                return true;
             }
             else
             {
                 ParameterStatusText = "Status: Error / Missing";
+                _parametersVerified = false;
                 SummaryText = msg;
                 TaskDialog.Show(Constants.AddInName, msg);
+                return false;
             }
         }
 
@@ -247,11 +297,27 @@ namespace MEPBuriedDepthCalculator.UI
                 return;
             }
 
-            var oldCursor = Mouse.OverrideCursor;
-            Mouse.OverrideCursor = Cursors.Wait;
-            try
+            // A user picking "Manually Picked" but never clicking "Pick Elements from Revit"
+            // used to silently fall through to an empty selection with a generic error.
+            // Catch it here with a message that tells them what to actually do.
+            if (IsPickElements && _pickedElementIds.Count == 0)
             {
+                SummaryText = "No elements picked yet. Click \"Pick Elements from Revit\" first.";
+                TaskDialog.Show(Constants.AddInName, "You've selected \"Manually Picked\" mode but haven't picked any elements yet.\n\nClick \"Pick Elements from Revit\" first, then Calculate.");
+                return;
+            }
 
+            // Auto-verify/bind shared parameters if the user hasn't already done so via the
+            // explicit button — previously, skipping that step meant parameter writes would
+            // silently fail later with only a log entry to show for it.
+            if (!_parametersVerified)
+            {
+                if (!EnsureParametersInternal(uiapp, showDialogOnSuccess: false))
+                {
+                    // EnsureParametersInternal already showed the error dialog.
+                    return;
+                }
+            }
 
             var options = new CalculationOptions
             {
@@ -282,26 +348,79 @@ namespace MEPBuriedDepthCalculator.UI
                 return;
             }
 
-            SummaryText = "Calculating... please wait.";
-            
-            var calcService = new DepthCalculationService(_logger);
-            var results = calcService.CalculateAndApply(doc, elements, options, out CalculationSummary summary);
+            // Set busy state and force a Dispatcher render pass BEFORE the blocking calculation
+            // runs. Without this, the window (running on Revit's single UI thread) never repaints
+            // the "Calculating..." message or the wait cursor — it just appears to freeze.
+            IsBusy = true;
+            SummaryText = $"Calculating {elements.Count} element(s)... please wait.";
+            System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+            _window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
 
-            string resultMsg = $"Calculation Complete!\n\n" +
-                               $"Total Selected: {summary.TotalSelected}\n" +
-                               $"Processed: {summary.Processed}\n" +
-                               $"Updated: {summary.Updated}\n" +
-                               $"Skipped: {summary.Skipped}\n" +
-                               $"Errors: {summary.Errors}\n" +
-                               $"Duration: {summary.Duration.TotalSeconds:F2}s\n\n" +
-                               $"Detailed log saved to your Desktop.";
+            try
+            {
+                var calcService = new DepthCalculationService(_logger);
+                var results = calcService.CalculateAndApply(doc, elements, options, out CalculationSummary summary);
+
+                PopulateResultRows(doc, results);
+
+                string resultMsg = $"Calculation Complete!\n\n" +
+                                   $"Total Selected: {summary.TotalSelected}\n" +
+                                   $"Processed: {summary.Processed}\n" +
+                                   $"Updated: {summary.Updated}\n" +
+                                   $"Skipped: {summary.Skipped}\n" +
+                                   $"Errors: {summary.Errors}\n" +
+                                   $"Duration: {summary.Duration.TotalSeconds:F2}s\n\n" +
+                                   $"Detailed log saved to your Desktop.";
 
                 SummaryText = resultMsg;
                 TaskDialog.Show(Constants.AddInName, resultMsg);
             }
             finally
             {
-                Mouse.OverrideCursor = oldCursor;
+                System.Windows.Input.Mouse.OverrideCursor = null;
+                IsBusy = false;
+            }
+        }
+
+        private void PopulateResultRows(Document doc, List<Models.ElementCalculationResult> results)
+        {
+            ResultRows.Clear();
+            foreach (var r in results)
+            {
+                var notes = new List<string>();
+                if (r.Warnings != null) notes.AddRange(r.Warnings);
+                if (r.Errors != null) notes.AddRange(r.Errors);
+                if (r.StartResult?.Warning != null) notes.Add(r.StartResult.Warning);
+                if (r.StartResult?.Error != null) notes.Add(r.StartResult.Error);
+                if (r.EndResult?.Warning != null) notes.Add(r.EndResult.Warning);
+                if (r.EndResult?.Error != null) notes.Add(r.EndResult.Error);
+
+                ResultRows.Add(new ElementResultRow
+                {
+                    ElementIdText = r.ElementId?.ToString() ?? "-",
+                    CategoryName = r.CategoryName,
+                    StatusText = r.Status.ToString(),
+                    StartDepthText = r.StartResult != null && r.StartResult.IsValid ? FormatLength(doc, r.StartResult.Depth) : "-",
+                    EndDepthText = r.EndResult != null && r.EndResult.IsValid ? FormatLength(doc, r.EndResult.Depth) : "-",
+                    NotesText = string.Join("; ", notes.Distinct())
+                });
+            }
+        }
+
+        /// <summary>Formats a length stored in Revit's internal feet using the document's
+        /// actual project display units, instead of showing raw internal-foot values.</summary>
+        private string FormatLength(Document doc, double internalFeetValue)
+        {
+            try
+            {
+                var formatOptions = doc.GetUnits().GetFormatOptions(SpecTypeId.Length);
+                double converted = UnitUtils.ConvertFromInternalUnits(internalFeetValue, formatOptions.GetUnitTypeId());
+                string symbol = LabelUtils.GetLabelForUnit(formatOptions.GetUnitTypeId());
+                return $"{converted:F2} {symbol}";
+            }
+            catch
+            {
+                return $"{internalFeetValue:F3} ft";
             }
         }
 
