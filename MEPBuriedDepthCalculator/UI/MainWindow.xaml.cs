@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using Autodesk.Revit.DB;
@@ -17,13 +16,18 @@ namespace MEPBuriedDepthCalculator.UI
         }
     }
 
-    /// <summary>Inverts a bool — used to disable input controls while IsBusy is true.</summary>
     public class InverseBooleanConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-            => value is bool b ? !b : value;
+        public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is bool boolValue) return !boolValue;
+            return true;
+        }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => value is bool b ? !b : value;
+        public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        {
+            if (value is bool boolValue) return !boolValue;
+            return true;
+        }
     }
 }
