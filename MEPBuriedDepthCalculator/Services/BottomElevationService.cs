@@ -53,7 +53,7 @@ namespace MEPBuriedDepthCalculator.Services
                 }
                 else if (elem is Conduit conduit)
                 {
-                    Parameter diamParam = conduit.get_Parameter(BuiltInParameter.RBS_CONDUIT_OUTER_DIAMETER_PARAM);
+                    Parameter diamParam = conduit.get_Parameter(BuiltInParameter.RBS_CONDUIT_OUTER_DIAM_PARAM);
                     double diameter = (diamParam != null && diamParam.HasValue) ? diamParam.AsDouble() : conduit.Diameter;
                     radiusOrHalfHeight = diameter / 2.0;
                     _logger.Debug("BottomElevation", $"Conduit ID {elem.Id}: Diameter={diameter}, CenterlineZ={centerlineZ}");
