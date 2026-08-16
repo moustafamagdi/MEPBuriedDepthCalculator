@@ -42,6 +42,7 @@ namespace MEPBuriedDepthCalculator.UI
         private readonly UIDocument _uidoc;
         private readonly ILogger _logger;
         private readonly Window _window;
+        private readonly RevitEventService _eventService;
 
         private bool _isCurrentSelection = true;
         private bool _isPickElements;
@@ -110,14 +111,15 @@ namespace MEPBuriedDepthCalculator.UI
             _uidoc = uidoc;
             _logger = logger;
             _window = window;
+            _eventService = new RevitEventService();
 
             RefreshLinks();
             LoadSettings();
 
             RefreshLinksCommand = new RelayCommand(RefreshLinks);
-            EnsureParametersCommand = new RelayCommand(EnsureParameters);
-            PickElementsCommand = new RelayCommand(PickElements);
-            CalculateCommand = new RelayCommand(Calculate);
+            EnsureParametersCommand = new RelayCommand(() => _eventService.Run(EnsureParametersAction));
+            PickElementsCommand = new RelayCommand(() => _eventService.Run(PickElementsAction));
+            CalculateCommand = new RelayCommand(() => _eventService.Run(CalculateAction));
         }
 
         private void LoadSettings()
@@ -169,10 +171,11 @@ namespace MEPBuriedDepthCalculator.UI
             _logger.Info("LinkSelection", $"Refreshed links list. Found {AvailableLinks.Count} links.");
         }
 
-        private void EnsureParameters()
+        private void EnsureParametersAction(UIApplication uiapp)
         {
+            var doc = uiapp.ActiveUIDocument.Document;
             var paramService = new SharedParameterService(_logger);
-            if (paramService.EnsureSharedParametersExist(_doc, out string msg))
+            if (paramService.EnsureSharedParametersExist(doc, out string msg))
             {
                 ParameterStatusText = "Status: Verified & Bound";
                 SummaryText = "Shared parameters successfully verified.";
@@ -186,18 +189,24 @@ namespace MEPBuriedDepthCalculator.UI
             }
         }
 
-        private void PickElements()
+        private void PickElementsAction(UIApplication uiapp)
         {
             try
             {
-                _window.Hide();
+                var uidoc = uiapp.ActiveUIDocument;
+                var doc = uidoc.Document;
+                
+                // Note: Using modeless-like behavior with Raise() usually works best with Show()
+                // But if we are in ShowDialog, we need to be careful.
+                // For simplicity in modal dialog, we just execute directly.
+                
                 var selectionService = new ElementSelectionService(_logger);
-                var pickedRefs = _uidoc.Selection.PickObjects(ObjectType.Element, "Select MEP elements (Pipes, Ducts, Conduits)");
+                var pickedRefs = uidoc.Selection.PickObjects(ObjectType.Element, "Select MEP elements (Pipes, Ducts, Conduits)");
                 
                 _pickedElementIds.Clear();
                 foreach (var reference in pickedRefs)
                 {
-                    var elem = _doc.GetElement(reference);
+                    var elem = doc.GetElement(reference);
                     if (selectionService.IsSupportedElement(elem))
                     {
                         _pickedElementIds.Add(elem.Id);
@@ -215,14 +224,13 @@ namespace MEPBuriedDepthCalculator.UI
             {
                 _logger.Error("Selection", "Error picking elements", ex);
             }
-            finally
-            {
-                _window.Show();
-            }
         }
 
-        private void Calculate()
+        private void CalculateAction(UIApplication uiapp)
         {
+            var uidoc = uiapp.ActiveUIDocument;
+            var doc = uidoc.Document;
+
             if (SelectedLink == null)
             {
                 SummaryText = "Error: Please select a Finished Ground Revit Link.";
@@ -244,12 +252,12 @@ namespace MEPBuriedDepthCalculator.UI
             List<Element> elements;
             if (IsPickElements && _pickedElementIds.Count > 0)
             {
-                elements = _pickedElementIds.Select(id => _doc.GetElement(id)).ToList();
+                elements = _pickedElementIds.Select(id => doc.GetElement(id)).ToList();
             }
             else
             {
                 var selectionService = new ElementSelectionService(_logger);
-                elements = selectionService.GetSelectedElements(_doc, _uidoc, options);
+                elements = selectionService.GetSelectedElements(doc, uidoc, options);
             }
 
             if (elements == null || elements.Count == 0)
@@ -262,7 +270,7 @@ namespace MEPBuriedDepthCalculator.UI
             SummaryText = "Calculating... please wait.";
             
             var calcService = new DepthCalculationService(_logger);
-            var results = calcService.CalculateAndApply(_doc, elements, options, out CalculationSummary summary);
+            var results = calcService.CalculateAndApply(doc, elements, options, out CalculationSummary summary);
 
             string resultMsg = $"Calculation Complete!\n\n" +
                                $"Total Selected: {summary.TotalSelected}\n" +

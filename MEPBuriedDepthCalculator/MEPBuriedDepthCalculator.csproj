@@ -69,6 +69,7 @@
     <Compile Include="Services\SharedParameterService.cs" />
     <Compile Include="Services\DepthCalculationService.cs" />
     <Compile Include="Services\SettingsService.cs" />
+    <Compile Include="Services\RevitEventService.cs" />
     <Compile Include="Commands\LaunchCommand.cs" />
     <Compile Include="UI\MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>

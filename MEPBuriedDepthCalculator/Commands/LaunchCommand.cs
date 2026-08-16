@@ -25,9 +25,8 @@ namespace MEPBuriedDepthCalculator.Commands
                 logger.Info("Initialization", $"Revit Version: 2024. Active Document: {doc.Title}");
 
                 var window = new MainWindow(doc, uidoc, logger);
-                window.ShowDialog();
+                window.Show();
 
-                logger.Info("Initialization", "Add-in window closed successfully.");
                 return Result.Succeeded;
             }
             catch (Exception ex)
