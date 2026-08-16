@@ -45,43 +45,42 @@ namespace MEPBuriedDepthCalculator.Services
 
                 if (elem is Pipe pipe)
                 {
-                    double outerDiameter = pipe.Diameter;
-                    radiusOrHalfHeight = outerDiameter / 2.0;
-                    _logger.Debug("BottomElevation", $"Pipe ID {elem.Id}: Diameter={outerDiameter}, CenterlineZ={centerlineZ}");
+                    // Use BuiltInParameter for more reliability
+                    Parameter diamParam = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+                    double diameter = (diamParam != null && diamParam.HasValue) ? diamParam.AsDouble() : pipe.Diameter;
+                    radiusOrHalfHeight = diameter / 2.0;
+                    _logger.Debug("BottomElevation", $"Pipe ID {elem.Id}: Diameter={diameter}, CenterlineZ={centerlineZ}");
                 }
                 else if (elem is Conduit conduit)
                 {
-                    double diameter = conduit.Diameter;
+                    Parameter diamParam = conduit.get_Parameter(BuiltInParameter.RBS_CONDUIT_OUTER_DIAMETER_PARAM);
+                    double diameter = (diamParam != null && diamParam.HasValue) ? diamParam.AsDouble() : conduit.Diameter;
                     radiusOrHalfHeight = diameter / 2.0;
                     _logger.Debug("BottomElevation", $"Conduit ID {elem.Id}: Diameter={diameter}, CenterlineZ={centerlineZ}");
                 }
                 else if (elem is Duct duct)
                 {
-                    // Check duct shape / dimensions (width, height, diameter)
                     try
                     {
-                        // Parameter lookup for width/height/diameter
-                        Parameter heightParam = duct.LookupParameter("Height");
-                        Parameter diameterParam = duct.LookupParameter("Diameter");
+                        Parameter heightParam = duct.get_Parameter(BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+                        Parameter diameterParam = duct.get_Parameter(BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
 
                         if (heightParam != null && heightParam.HasValue)
                         {
-                            double height = heightParam.AsDouble();
-                            radiusOrHalfHeight = height / 2.0;
+                            radiusOrHalfHeight = heightParam.AsDouble() / 2.0;
                         }
                         else if (diameterParam != null && diameterParam.HasValue)
                         {
-                            double diameter = diameterParam.AsDouble();
-                            radiusOrHalfHeight = diameter / 2.0;
+                            radiusOrHalfHeight = diameterParam.AsDouble() / 2.0;
                         }
                         else
                         {
-                            radiusOrHalfHeight = 0.5; // fallback default
+                            radiusOrHalfHeight = 0.0;
                         }
                     }
                     catch
                     {
-                        radiusOrHalfHeight = 0.5;
+                        radiusOrHalfHeight = 0.0;
                     }
                     _logger.Debug("BottomElevation", $"Duct ID {elem.Id}: HalfHeight={radiusOrHalfHeight}, CenterlineZ={centerlineZ}");
                 }

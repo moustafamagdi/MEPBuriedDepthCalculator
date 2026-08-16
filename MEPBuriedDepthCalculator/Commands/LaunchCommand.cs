@@ -13,7 +13,7 @@ namespace MEPBuriedDepthCalculator.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            var logger = new FileLogger(debugMode: false);
+            var logger = new FileLogger(debugMode: true);
             try
             {
                 logger.Info("Initialization", "MEP Buried Depth Calculator add-in launched.");

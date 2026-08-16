@@ -35,7 +35,6 @@ namespace MEPBuriedDepthCalculator.Utilities
         public static double? InterpolateZOnTriangle(XYZ p, XYZ a, XYZ b, XYZ c)
         {
             double x = p.X, y = p.Y;
-            double x1 = a.X, y1 = a.X == 0 ? a.Y : a.Y; // keep simple
             // Barycentric interpolation
             double det = (b.Y - c.Y) * (a.X - c.X) + (c.X - b.X) * (a.Y - c.Y);
             if (Math.Abs(det) < 1e-12) return null;

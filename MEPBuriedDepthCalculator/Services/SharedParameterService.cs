@@ -104,7 +104,14 @@ namespace MEPBuriedDepthCalculator.Services
             }
             catch (Exception ex)
             {
-                message = $"Error ensuring shared parameters: {ex.Message}";
+                if (ex.Message.Contains("associated shared parameter file"))
+                {
+                    message = "Error: The Revit Shared Parameter file is read-only or currently locked by another process. Please check the file properties and try again.";
+                }
+                else
+                {
+                    message = $"Error ensuring shared parameters: {ex.Message}";
+                }
                 _logger.Error("ParameterBinding", message, ex);
                 return false;
             }
