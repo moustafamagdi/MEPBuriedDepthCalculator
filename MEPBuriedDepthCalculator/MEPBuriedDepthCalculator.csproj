@@ -62,7 +62,6 @@
     <Compile Include="Logging\FileLogger.cs" />
     <Compile Include="Logging\LogContext.cs" />
     <Compile Include="Utilities\GeometryUtils.cs" />
-    <Compile Include="Utilities\UnitConversionService.cs" />
     <Compile Include="Services\ElementSelectionService.cs" />
     <Compile Include="Services\LinkedModelService.cs" />
     <Compile Include="Services\ToposolidService.cs" />
