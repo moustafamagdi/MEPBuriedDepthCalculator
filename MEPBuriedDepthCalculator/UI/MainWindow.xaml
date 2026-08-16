@@ -23,19 +23,19 @@
         <!-- Selection Mode -->
         <GroupBox Grid.Row="1" Header="Element Selection Mode" Padding="10" Margin="0,0,0,10">
             <StackPanel>
-                <RadioButton Content="Current Selection" IsChecked="{Binding IsCurrentSelection}" Margin="0,2"/>
+                <RadioButton Content="Current Selection" IsChecked="{Binding IsCurrentSelection}" GroupName="SelectionGroup" Margin="0,2"/>
                 <Grid Margin="0,2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <RadioButton Grid.Column="0" Content="Manually Picked" IsChecked="{Binding IsPickElements}" VerticalAlignment="Center"/>
+                    <RadioButton Grid.Column="0" Content="Manually Picked" IsChecked="{Binding IsPickElements}" GroupName="SelectionGroup" VerticalAlignment="Center"/>
                     <Button Grid.Column="1" Content="Pick" Command="{Binding PickElementsCommand}" Width="50" Height="20" Margin="10,0,0,0" FontSize="10"/>
                     <TextBlock Grid.Column="2" Text="{Binding PickedCountText}" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="10" Foreground="Gray"/>
                 </Grid>
-                <RadioButton Content="Current View" IsChecked="{Binding IsCurrentView}" Margin="0,2"/>
-                <RadioButton Content="Entire Model" IsChecked="{Binding IsEntireModel}" Margin="0,2"/>
+                <RadioButton Content="Current View" IsChecked="{Binding IsCurrentView}" GroupName="SelectionGroup" Margin="0,2"/>
+                <RadioButton Content="Entire Model" IsChecked="{Binding IsEntireModel}" GroupName="SelectionGroup" Margin="0,2"/>
             </StackPanel>
         </GroupBox>
 

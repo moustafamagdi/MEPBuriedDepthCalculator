@@ -54,11 +54,7 @@ namespace MEPBuriedDepthCalculator.UI
         private readonly Window _window;
         private readonly RevitEventService _eventService;
 
-        private bool _isCurrentSelection = true;
-        private bool _isPickElements;
-        private bool _isCurrentView;
-        private bool _isEntireModel;
-
+        private SelectionMode _currentSelectionMode = SelectionMode.CurrentSelection;
         private List<ElementId> _pickedElementIds = new List<ElementId>();
         private LinkedModelInfo _selectedLink;
         private string _parameterStatusText = "Status: Checking...";
@@ -73,32 +69,41 @@ namespace MEPBuriedDepthCalculator.UI
 
         public bool IsCurrentSelection
         {
-            get => _isCurrentSelection;
-            set { _isCurrentSelection = value; OnPropertyChanged(nameof(IsCurrentSelection)); SaveSettings(); }
+            get => _currentSelectionMode == SelectionMode.CurrentSelection;
+            set { if (value) { _currentSelectionMode = SelectionMode.CurrentSelection; NotifySelectionProperties(); SaveSettings(); } }
         }
 
         public bool IsPickElements
         {
-            get => _isPickElements;
-            set { _isPickElements = value; OnPropertyChanged(nameof(IsPickElements)); SaveSettings(); }
+            get => _currentSelectionMode == SelectionMode.PickElements;
+            set { if (value) { _currentSelectionMode = SelectionMode.PickElements; NotifySelectionProperties(); SaveSettings(); } }
         }
 
         public bool IsCurrentView
         {
-            get => _isCurrentView;
-            set { _isCurrentView = value; OnPropertyChanged(nameof(IsCurrentView)); SaveSettings(); }
+            get => _currentSelectionMode == SelectionMode.CurrentView;
+            set { if (value) { _currentSelectionMode = SelectionMode.CurrentView; NotifySelectionProperties(); SaveSettings(); } }
         }
 
         public bool IsEntireModel
         {
-            get => _isEntireModel;
-            set { _isEntireModel = value; OnPropertyChanged(nameof(IsEntireModel)); SaveSettings(); }
+            get => _currentSelectionMode == SelectionMode.EntireModel;
+            set { if (value) { _currentSelectionMode = SelectionMode.EntireModel; NotifySelectionProperties(); SaveSettings(); } }
+        }
+
+        private void NotifySelectionProperties()
+        {
+            OnPropertyChanged(nameof(IsCurrentSelection));
+            OnPropertyChanged(nameof(IsPickElements));
+            OnPropertyChanged(nameof(IsCurrentView));
+            OnPropertyChanged(nameof(IsEntireModel));
+            CommandManager.InvalidateRequerySuggested();
         }
 
         public LinkedModelInfo SelectedLink
         {
             get => _selectedLink;
-            set { _selectedLink = value; OnPropertyChanged(nameof(SelectedLink)); SaveSettings(); }
+            set { _selectedLink = value; OnPropertyChanged(nameof(SelectedLink)); CommandManager.InvalidateRequerySuggested(); SaveSettings(); }
         }
 
         public string ParameterStatusText
@@ -150,10 +155,9 @@ namespace MEPBuriedDepthCalculator.UI
         {
             if (IsBusy) return false;
             if (SelectedLink == null) return false;
-            if (IsPickElements && _pickedElementIds.Count == 0) return false;
             
-            // For current selection, check if anything is selected
-            if (IsCurrentSelection && _uidoc.Selection.GetElementIds().Count == 0) return false;
+            if (IsPickElements) return _pickedElementIds.Count > 0;
+            if (IsCurrentSelection) return _uidoc.Selection.GetElementIds().Count > 0;
 
             return true;
         }
@@ -161,10 +165,8 @@ namespace MEPBuriedDepthCalculator.UI
         private void LoadSettings()
         {
             var settings = SettingsService.Load();
-            IsCurrentSelection = settings.LastSelectionMode == SelectionMode.CurrentSelection;
-            IsPickElements = settings.LastSelectionMode == SelectionMode.PickElements;
-            IsCurrentView = settings.LastSelectionMode == SelectionMode.CurrentView;
-            IsEntireModel = settings.LastSelectionMode == SelectionMode.EntireModel;
+            _currentSelectionMode = settings.LastSelectionMode;
+            NotifySelectionProperties();
 
             if (!string.IsNullOrEmpty(settings.LastSelectedLinkName))
             {
@@ -175,12 +177,7 @@ namespace MEPBuriedDepthCalculator.UI
 
         private void SaveSettings()
         {
-            var settings = new UserSettings();
-            if (IsCurrentSelection) settings.LastSelectionMode = SelectionMode.CurrentSelection;
-            else if (IsPickElements) settings.LastSelectionMode = SelectionMode.PickElements;
-            else if (IsCurrentView) settings.LastSelectionMode = SelectionMode.CurrentView;
-            else if (IsEntireModel) settings.LastSelectionMode = SelectionMode.EntireModel;
-
+            var settings = new UserSettings { LastSelectionMode = _currentSelectionMode };
             if (SelectedLink != null)
             {
                 settings.LastSelectedLinkName = SelectedLink.Name;
@@ -227,6 +224,10 @@ namespace MEPBuriedDepthCalculator.UI
             {
                 var uidoc = uiapp.ActiveUIDocument;
                 var selectionService = new ElementSelectionService(_logger);
+                
+                // Hide window during pick
+                _window.Dispatcher.Invoke(() => _window.Hide());
+                
                 var pickedRefs = uidoc.Selection.PickObjects(ObjectType.Element, "Select MEP elements (Pipes, Ducts, Conduits)");
                 
                 _pickedElementIds.Clear();
@@ -242,6 +243,15 @@ namespace MEPBuriedDepthCalculator.UI
             }
             catch (Autodesk.Revit.Exceptions.OperationCanceledException) { }
             catch (Exception ex) { _logger.Error("Selection", "Error picking elements", ex); }
+            finally
+            {
+                // Show and activate window
+                _window.Dispatcher.Invoke(() => {
+                    _window.Show();
+                    _window.Activate();
+                    _window.Focus();
+                });
+            }
         }
 
         private void CalculateAction(UIApplication uiapp)
@@ -259,11 +269,11 @@ namespace MEPBuriedDepthCalculator.UI
 
             try
             {
-                var options = new CalculationOptions { SelectedLinkInstanceId = SelectedLink.InstanceId, SelectedLinkName = SelectedLink.Name };
-                if (IsCurrentSelection) options.SelectionMode = SelectionMode.CurrentSelection;
-                else if (IsPickElements) options.SelectionMode = SelectionMode.PickElements;
-                else if (IsCurrentView) options.SelectionMode = SelectionMode.CurrentView;
-                else if (IsEntireModel) options.SelectionMode = SelectionMode.EntireModel;
+                var options = new CalculationOptions { 
+                    SelectedLinkInstanceId = SelectedLink.InstanceId, 
+                    SelectedLinkName = SelectedLink.Name,
+                    SelectionMode = _currentSelectionMode
+                };
 
                 var selectionService = new ElementSelectionService(_logger);
                 var elements = selectionService.GetSelectedElements(doc, uidoc, options, _pickedElementIds);
