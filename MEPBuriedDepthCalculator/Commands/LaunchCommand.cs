@@ -1,0 +1,41 @@
+using System;
+using Autodesk.DB;
+using Autodesk.UI;
+using Autodesk.UI.Selection;
+using MEPBuriedDepthCalculator.Logging;
+using MEPBuriedDepthCalculator.UI;
+
+namespace MEPBuriedDepthCalculator.Commands
+{
+    [Autodesk.Attributes.Transaction(Autodesk.Attributes.TransactionMode.Manual)]
+    [Autodesk.Attributes.Regeneration(Autodesk.Attributes.RegenerationOption.Manual)]
+    public class LaunchCommand : IExternalCommand
+    {
+        public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
+        {
+            var logger = new FileLogger(debugMode: false);
+            try
+            {
+                logger.Info("Initialization", "MEP Buried Depth Calculator add-in launched.");
+                
+                UIApplication uiapp = commandData.Application;
+                UIDocument uidoc = uiapp.ActiveUIDocument;
+                Document doc = uidoc.Document;
+
+                logger.Info("Initialization", $"Revit Version: 2024. Active Document: {doc.Title}");
+
+                var window = new MainWindow(doc, uidoc, logger);
+                window.ShowDialog();
+
+                logger.Info("Initialization", "Add-in window closed successfully.");
+                return Result.Succeeded;
+            }
+            catch (Exception ex)
+            {
+                logger.Fatal("Initialization", "Fatal error launching add-in", ex);
+                message = ex.Message;
+                return Result.Failed;
+            }
+        }
+    }
+}

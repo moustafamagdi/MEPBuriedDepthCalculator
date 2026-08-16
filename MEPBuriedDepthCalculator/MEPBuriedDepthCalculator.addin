@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Command">
+    <Text>MEP Buried Depth Calculator</Text>
+    <Assembly>MEPBuriedDepthCalculator/MEPBuriedDepthCalculator.dll</Assembly>
+    <FullClassName>MEPBuriedDepthCalculator.Commands.LaunchCommand</FullClassName>
+    <ClientId>8F4B3C2A-1111-4444-8888-A1B2C3D4E5F6}</ClientId>
+    <VendorId>MANUS</VendorId>
+    <VendorDescription>Manus AI, MEP Buried Depth Calculator for Revit 2024</VendorDescription>
+  </AddIn>
+</RevitAddIns>
