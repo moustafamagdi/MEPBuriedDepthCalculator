@@ -143,7 +143,7 @@ namespace MEPBuriedDepthCalculator.Services
             }
             catch (Exception ex)
             {
-                _logger.Debug("ToposolidGeometry", `Failed to extract triangulation for Toposolid {toposolidElem.Id}: {ex.Message}`);
+                _logger.Debug("ToposolidGeometry", $"Failed to extract triangulation for Toposolid {toposolidElem.Id}: {ex.Message}");
                 return null;
             }
         }

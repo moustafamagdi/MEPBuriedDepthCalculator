@@ -26,66 +26,74 @@ namespace MEPBuriedDepthCalculator.Services
 
         public ElementDimensionResult CalculateBottomElevation(Element elem, XYZ endpoint)
         {
-            try
-            string catName = elem.Category?.Name ?? "";
             double centerlineZ = endpoint.Z;
             double radiusOrHalfHeight = 0.0;
             string typeName = "Unknown";
 
-            // Check element type
-            Element elementType = elem.Document.GetElement(elem.GetTypeId());
-            if (elementType != null)
+            try
             {
-                typeName = elementType.Name;
-            }
-
-            if (elem is Pipe pipe)
-            {
-                double outerDiameter = pipe.Diameter;
-                radiusOrHalfHeight = outerDiameter / 2.0;
-                _logger.Debug("BottomElevation", $"Pipe ID {elem.Id}: Diameter={outerDiameter}, CenterlineZ={centerlineZ}");
-            }
-            else if (elem is Conduit conduit)
-            {
-                double diameter = conduit.Diameter;
-                radiusOrHalfHeight = diameter / 2.0;
-                _logger.Debug("BottomElevation", $"Conduit ID {elem.Id}: Diameter={diameter}, CenterlineZ={centerlineZ}");
-            }
-            else if (elem is Duct duct)
-            {
-                // Check duct shape / dimensions (width, height, diameter)
-                try
+                // Check element type
+                ElementId typeId = elem.GetTypeId();
+                if (typeId != ElementId.InvalidElementId)
                 {
-                    // Parameter lookup for width/height/diameter
-                    Parameter widthParam = duct.LookupParameter("Width");
-                    Parameter heightParam = duct.LookupParameter("Height");
-                    Parameter diameterParam = duct.LookupParameter("Diameter");
-
-                    if (heightParam != null && heightParam.HasValue)
+                    Element elementType = elem.Document.GetElement(typeId);
+                    if (elementType != null)
                     {
-                        double height = heightParam.AsDouble();
-                        radiusOrHalfHeight = height / 2.0;
-                    }
-                    else if (diameterParam != null && diameterParam.HasValue)
-                    {
-                        double diameter = diameterParam.AsDouble();
-                        radiusOrHalfHeight = diameter / 2.0;
-                    }
-                    else
-                    {
-                        radiusOrHalfHeight = 0.5; // fallback default
+                        typeName = elementType.Name;
                     }
                 }
-                catch
+
+                if (elem is Pipe pipe)
                 {
-                    radiusOrHalfHeight = 0.5;
+                    double outerDiameter = pipe.Diameter;
+                    radiusOrHalfHeight = outerDiameter / 2.0;
+                    _logger.Debug("BottomElevation", $"Pipe ID {elem.Id}: Diameter={outerDiameter}, CenterlineZ={centerlineZ}");
                 }
-                _logger.Debug("BottomElevation", $"Duct ID {elem.Id}: HalfHeight={radiusOrHalfHeight}, CenterlineZ={centerlineZ}");
+                else if (elem is Conduit conduit)
+                {
+                    double diameter = conduit.Diameter;
+                    radiusOrHalfHeight = diameter / 2.0;
+                    _logger.Debug("BottomElevation", $"Conduit ID {elem.Id}: Diameter={diameter}, CenterlineZ={centerlineZ}");
+                }
+                else if (elem is Duct duct)
+                {
+                    // Check duct shape / dimensions (width, height, diameter)
+                    try
+                    {
+                        // Parameter lookup for width/height/diameter
+                        Parameter heightParam = duct.LookupParameter("Height");
+                        Parameter diameterParam = duct.LookupParameter("Diameter");
+
+                        if (heightParam != null && heightParam.HasValue)
+                        {
+                            double height = heightParam.AsDouble();
+                            radiusOrHalfHeight = height / 2.0;
+                        }
+                        else if (diameterParam != null && diameterParam.HasValue)
+                        {
+                            double diameter = diameterParam.AsDouble();
+                            radiusOrHalfHeight = diameter / 2.0;
+                        }
+                        else
+                        {
+                            radiusOrHalfHeight = 0.5; // fallback default
+                        }
+                    }
+                    catch
+                    {
+                        radiusOrHalfHeight = 0.5;
+                    }
+                    _logger.Debug("BottomElevation", $"Duct ID {elem.Id}: HalfHeight={radiusOrHalfHeight}, CenterlineZ={centerlineZ}");
+                }
+                else
+                {
+                    // Fallback for generic curves
+                    radiusOrHalfHeight = 0.0;
+                }
             }
-            else
+            catch (Exception ex)
             {
-                // Fallback for generic curves
-                radiusOrHalfHeight = 0.0;
+                _logger.Error("BottomElevation", $"Error calculating bottom elevation for element {elem.Id}", ex);
             }
 
             double bottomZ = centerlineZ - radiusOrHalfHeight;

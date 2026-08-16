@@ -28,7 +28,7 @@ namespace MEPBuriedDepthCalculator.UI
             remove => CommandManager.RequerySuggested -= value;
         }
 
-        public bool CanExecute(parameter) => _canExecute == null || _canExecute();
+        public bool CanExecute(object parameter) => _canExecute == null || _canExecute();
 
         public void Execute(object parameter) => _execute();
     }

@@ -223,11 +223,11 @@ namespace MEPBuriedDepthCalculator.Services
                 {
                     param.Set(valueInFeet);
                     updatedFlag = true;
-                    _logger.Debug("ParameterWrite", `Successfully wrote {paramName} = {valueInFeet:F4} to element {elem.Id}`);
+                    _logger.Debug("ParameterWrite", $"Successfully wrote {paramName} = {valueInFeet:F4} to element {elem.Id}");
                 }
                 else
                 {
-                    _logger.Warning("ParameterWrite", `Parameter '{paramName}' not found, read-only, or incompatible on element {elem.Id}`);
+                    _logger.Warning("ParameterWrite", $"Parameter '{paramName}' not found, read-only, or incompatible on element {elem.Id}");
                 }
             }
             catch (Exception ex)
