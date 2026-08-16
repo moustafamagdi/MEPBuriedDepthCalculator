@@ -54,6 +54,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Constants.cs" />
+    <Compile Include="App.cs" />
     <Compile Include="Models\CalculationOptions.cs" />
     <Compile Include="Models\EndpointCalculationResult.cs" />
     <Compile Include="Models\ElementCalculationResult.cs" />
