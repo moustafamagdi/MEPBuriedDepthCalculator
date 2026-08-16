@@ -152,7 +152,7 @@ namespace MEPBuriedDepthCalculator.Services
                     errorCount++;
                     elemResult.Status = CalculationStatus.Error;
                     elemResult.Errors.Add(ex.Message);
-                    _logger.Error("CalculationEngine", $"Error calculating element {elem.Id}", ex, elem.Id.IntegerValue);
+                    _logger.Error("CalculationEngine", $"Error calculating element {elem.Id}", ex, elem.Id.Value);
                 }
 
                 results.Add(elemResult);
@@ -232,7 +232,7 @@ namespace MEPBuriedDepthCalculator.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("ParameterWrite", $"Failed to write parameter '{paramName}' on element {elem.Id}", ex, elem.Id.IntegerValue);
+                _logger.Error("ParameterWrite", $"Failed to write parameter '{paramName}' on element {elem.Id}", ex, elem.Id.Value);
             }
             return false;
         }

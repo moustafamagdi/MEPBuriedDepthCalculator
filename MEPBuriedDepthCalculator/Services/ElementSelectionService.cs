@@ -76,9 +76,9 @@ namespace MEPBuriedDepthCalculator.Services
             if (elem == null || elem.Category == null) return false;
             string catName = elem.Category.Name;
             return catName == "Pipes" || catName == "Ducts" || catName == "Conduits" ||
-                   elem.Category.Id.IntegerValue == (int)BuiltInCategory.OST_PipeCurves ||
-                   elem.Category.Id.IntegerValue == (int)BuiltInCategory.OST_DuctCurves ||
-                   elem.Category.Id.IntegerValue == (int)BuiltInCategory.OST_Conduit;
+                   elem.Category.Id.Value == (long)BuiltInCategory.OST_PipeCurves ||
+                   elem.Category.Id.Value == (long)BuiltInCategory.OST_DuctCurves ||
+                   elem.Category.Id.Value == (long)BuiltInCategory.OST_Conduit;
         }
 
         private ElementFilter GetSupportedCategoriesFilter()

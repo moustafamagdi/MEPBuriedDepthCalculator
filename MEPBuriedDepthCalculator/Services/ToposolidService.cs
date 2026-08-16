@@ -45,7 +45,7 @@ namespace MEPBuriedDepthCalculator.Services
 
                 foreach (Element elem in collector)
                 {
-                    if (elem.Category != null && (elem.Category.Id.IntegerValue == (int)BuiltInCategory.OST_Toposolid || elem.Category.Name.Contains("Toposolid")))
+                    if (elem.Category != null && (elem.Category.Id.Value == (long)BuiltInCategory.OST_Toposolid || elem.Category.Name.Contains("Toposolid")))
                     {
                         double? groundZ = EvaluateToposolidAtPoint(elem, linkPoint);
                         if (groundZ.HasValue)

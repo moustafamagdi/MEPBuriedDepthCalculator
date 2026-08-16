@@ -147,7 +147,7 @@ namespace MEPBuriedDepthCalculator.UI
             if (SelectedLink != null)
             {
                 settings.LastSelectedLinkName = SelectedLink.Name;
-                settings.LastSelectedLinkInstanceId = SelectedLink.InstanceId.GetLongValue();
+                settings.LastSelectedLinkInstanceId = SelectedLink.InstanceId.Value;
             }
 
             SettingsService.Save(settings);
