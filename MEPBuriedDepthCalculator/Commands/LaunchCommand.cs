@@ -1,14 +1,14 @@
 using System;
-using Autodesk.DB;
-using Autodesk.UI;
-using Autodesk.UI.Selection;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
+using Autodesk.Revit.UI.Selection;
 using MEPBuriedDepthCalculator.Logging;
 using MEPBuriedDepthCalculator.UI;
 
 namespace MEPBuriedDepthCalculator.Commands
 {
-    [Autodesk.Attributes.Transaction(Autodesk.Attributes.TransactionMode.Manual)]
-    [Autodesk.Attributes.Regeneration(Autodesk.Attributes.RegenerationOption.Manual)]
+    [Autodesk.Revit.Attributes.Transaction(Autodesk.Revit.Attributes.TransactionMode.Manual)]
+    [Autodesk.Revit.Attributes.Regeneration(Autodesk.Revit.Attributes.RegenerationOption.Manual)]
     public class LaunchCommand : IExternalCommand
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
