@@ -17,15 +17,23 @@
 
 ---
 
-## Deployment to Revit
+## Deployment & Sharing
 
-To load the add-in into Revit 2024:
+### Automatic Installation (Recommended)
+We have provided an `Install.bat` script to handle the deployment automatically.
+1. Build the project in **Release** mode.
+2. Ensure `MEPBuriedDepthCalculator.addin` and the `MEPBuriedDepthCalculator` folder (containing the DLL) are in the same directory as the script.
+3. Double-click **`Install.bat`**.
 
-1. Copy the built `.dll` file and its supporting files into the Revit Add-ins folder:
-   `%appdata%\Autodesk\Revit\Addins\2024\`
-2. Place the `MEPBuriedDepthCalculator.addin` manifest file directly into:
-   `%appdata%\Autodesk\Revit\Addins\2024\`
-3. Ensure the `<Assembly>` path inside `MEPBuriedDepthCalculator.addin` correctly points to the deployed `.dll`.
+### Sharing with Colleagues
+To share this tool, create a folder named `Hatco_Setup` containing:
+1. `Install.bat`
+2. `MEPBuriedDepthCalculator.addin`
+3. A subfolder named `MEPBuriedDepthCalculator` containing the compiled `MEPBuriedDepthCalculator.dll`.
+
+Zip this folder and send it. Your colleagues only need to unzip and run the `Install.bat` file.
+
+> **Note:** The installer is optimized to copy the DLL file **first**, followed by the manifest file. This ensures that Revit only detects the new add-in once all required binary files are already in place.
 
 ---
 
