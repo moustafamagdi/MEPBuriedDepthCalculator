@@ -3,149 +3,113 @@ using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using MEPBuriedDepthCalculator.Logging;
-using MEPBuriedDepthCalculator.Models;
 using MEPBuriedDepthCalculator.Utilities;
 
 namespace MEPBuriedDepthCalculator.Services
 {
-    public class GroundCandidate
+    public class ToposolidCache
     {
-        public ElementId ToposolidId { get; set; }
-        public double GroundElevation { get; set; }
+        public ElementId Id { get; set; }
+        public List<List<XYZ>> Triangles { get; set; } = new List<List<XYZ>>();
     }
 
     public class ToposolidService
     {
         private readonly ILogger _logger;
+        private List<ToposolidCache> _cachedToposolids;
+        private Document _lastDoc;
 
         public ToposolidService(ILogger logger)
         {
             _logger = logger;
         }
 
-        public GroundCandidate FindNearestUpperGround(Document linkedDoc, Transform linkTransform, XYZ hostPoint, double elementBottomZ)
+        public void InitializeCache(Document linkDoc)
         {
-            try
+            if (_lastDoc == linkDoc && _cachedToposolids != null) return;
+
+            _cachedToposolids = new List<ToposolidCache>();
+            _lastDoc = linkDoc;
+
+            var collector = new FilteredElementCollector(linkDoc)
+                .WhereElementIsNotElementType();
+
+            foreach (Element elem in collector)
             {
-                // 1. Transform host endpoint into linked model coordinate system
-                // Inverse transform or transform depending on Revit link coordinate convention.
-                // In Revit, linkTransform transforms from link coordinates to host coordinates.
-                // Therefore, to convert host point to link coordinates, we use linkTransform.Inverse.
-                Transform inverseTransform = linkTransform.Inverse;
-                XYZ linkPoint = inverseTransform.OfPoint(hostPoint);
-
-                _logger.Debug("ToposolidGeometry", $"Host point Z={hostPoint.Z:F4} transformed to link point Z={linkPoint.Z:F4}");
-
-                // 2. Collect Toposolids in linked document
-                // In Revit 2024, Toposolids are represented by BuiltInCategory.OST_Toposolid or class Toposolid (if available) or generic elements.
-                var candidates = new List<GroundCandidate>();
-
-                var collector = new FilteredElementCollector(linkedDoc)
-                    .WhereElementIsNotElementType();
-
-                foreach (Element elem in collector)
+                if (elem.Category != null && (elem.Category.Id.Value == (long)BuiltInCategory.OST_Toposolid || elem.Category.Name.Contains("Toposolid")))
                 {
-                    if (elem.Category != null && (elem.Category.Id.Value == (long)BuiltInCategory.OST_Toposolid || elem.Category.Name.Contains("Toposolid")))
+                    var cache = new ToposolidCache { Id = elem.Id };
+                    var opt = new Options { DetailLevel = ViewDetailLevel.Fine };
+                    GeometryElement geo = elem.get_Geometry(opt);
+                    if (geo == null) continue;
+
+                    foreach (GeometryObject obj in geo)
                     {
-                        double? groundZ = EvaluateToposolidAtPoint(elem, linkPoint);
-                        if (groundZ.HasValue)
+                        if (obj is Solid solid && solid.Volume > 0)
                         {
-                            // Transform ground elevation back to host coordinates if necessary, or evaluate in host Z space.
-                            // Since linkTransform handles vertical translation and scale (usually scale=1), we transform the point (linkPoint.X, linkPoint.Y, groundZ.Value) back to host coordinates.
-                            XYZ linkGroundPoint = new XYZ(linkPoint.X, linkPoint.Y, groundZ.Value);
-                            XYZ hostGroundPoint = linkTransform.OfPoint(linkGroundPoint);
-
-                            // Only consider surfaces located ABOVE or at the MEP endpoint
-                            if (hostGroundPoint.Z >= elementBottomZ - 1e-5)
+                            foreach (Face face in solid.Faces)
                             {
-                                candidates.Add(new GroundCandidate
+                                // Only process top-facing or near-top-facing surfaces
+                                if (face.ComputeNormal(new UV(0.5, 0.5)).Z > 0)
                                 {
-                                    ToposolidId = elem.Id,
-                                    GroundElevation = hostGroundPoint.Z
-                                });
-                            }
-                        }
-                    }
-                }
+                                    Mesh mesh = face.Triangulate();
+                                    if (mesh == null) continue;
 
-                if (candidates.Count == 0)
-                {
-                    return null;
-                }
-
-                // Select the NEAREST upper surface (minimum ground elevation among those >= elementBottomZ)
-                var sortedCandidates = candidates.OrderBy(c => c.GroundElevation).ToList();
-                var selected = sortedCandidates.First();
-
-                if (sortedCandidates.Count > 1)
-                {
-                    _logger.Warning("ToposolidDiscovery", $"Multiple ground surfaces ({sortedCandidates.Count}) detected above element point. Nearest upper surface (ID: {selected.ToposolidId}, Elev: {selected.GroundElevation:F4}) selected.");
-                }
-
-                return selected;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error("ToposolidGeometry", "Error evaluating Toposolid surface elevation", ex);
-                return null;
-            }
-        }
-
-        private double? EvaluateToposolidAtPoint(Element toposolidElem, XYZ linkPoint)
-        {
-            try
-            {
-                // Extract geometry options
-                var options = new Options
-                {
-                    ComputeReferences = true,
-                    DetailLevel = ViewDetailLevel.Fine
-                };
-
-                GeometryElement geomElem = toposolidElem.get_Geometry(options);
-                if (geomElem == null) return null;
-
-                double? highestIntersectZ = null;
-
-                foreach (GeometryObject geomObj in geomElem)
-                {
-                    if (geomObj is Solid solid && solid.Faces.Size > 0)
-                    {
-                        foreach (Face face in solid.Faces)
-                        {
-                            Mesh mesh = face.Triangulate();
-                            if (mesh == null) continue;
-
-                            for (int i = 0; i < mesh.NumTriangles; i++)
-                            {
-                                MeshTriangle triangle = mesh.get_Triangle(i);
-                                XYZ p1 = triangle.get_Vertex(0);
-                                XYZ p2 = triangle.get_Vertex(1);
-                                XYZ p3 = triangle.get_Vertex(2);
-
-                                if (GeometryUtils.IsPointInsideTriangle(linkPoint, p1, p2, p3))
-                                {
-                                    double? z = GeometryUtils.InterpolateZOnTriangle(linkPoint, p1, p2, p3);
-                                    if (z.HasValue)
+                                    for (int i = 0; i < mesh.NumTriangles; i++)
                                     {
-                                        if (!highestIntersectZ.HasValue || z.Value > highestIntersectZ.Value)
-                                        {
-                                            highestIntersectZ = z.Value;
-                                        }
+                                        MeshTriangle tri = mesh.get_Triangle(i);
+                                        cache.Triangles.Add(new List<XYZ> { tri.get_Vertex(0), tri.get_Vertex(1), tri.get_Vertex(2) });
                                     }
                                 }
                             }
                         }
                     }
+                    if (cache.Triangles.Count > 0)
+                    {
+                        _cachedToposolids.Add(cache);
+                    }
                 }
+            }
+            _logger.Info("ToposolidService", $"Initialized cache with {_cachedToposolids.Count} toposolids and {(_cachedToposolids.Sum(c => c.Triangles.Count))} triangles.");
+        }
 
-                return highestIntersectZ;
-            }
-            catch (Exception ex)
+        public double? FindNearestUpperGround(XYZ hostPoint, Transform linkTransform)
+        {
+            if (_cachedToposolids == null || _cachedToposolids.Count == 0) return null;
+
+            XYZ linkPoint = linkTransform.Inverse.OfPoint(hostPoint);
+            double? bestGroundZ = null;
+
+            foreach (var cache in _cachedToposolids)
             {
-                _logger.Debug("ToposolidGeometry", $"Failed to extract triangulation for Toposolid {toposolidElem.Id}: {ex.Message}");
-                return null;
+                foreach (var tri in cache.Triangles)
+                {
+                    if (GeometryUtils.IsPointInTriangleXY(linkPoint, tri[0], tri[1], tri[2]))
+                    {
+                        double? z = GeometryUtils.InterpolateZOnTriangle(linkPoint, tri[0], tri[1], tri[2]);
+                        if (z.HasValue)
+                        {
+                            // Ground must be above or at the point level
+                            if (z.Value >= linkPoint.Z)
+                            {
+                                if (!bestGroundZ.HasValue || z.Value < bestGroundZ.Value)
+                                {
+                                    bestGroundZ = z.Value;
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
+            if (bestGroundZ.HasValue)
+            {
+                XYZ linkGroundPoint = new XYZ(linkPoint.X, linkPoint.Y, bestGroundZ.Value);
+                XYZ hostGroundPoint = linkTransform.OfPoint(linkGroundPoint);
+                return hostGroundPoint.Z;
+            }
+
+            return null;
         }
     }
 }

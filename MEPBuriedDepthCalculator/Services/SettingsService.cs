@@ -16,7 +16,7 @@ namespace MEPBuriedDepthCalculator.Services
     {
         private static readonly string SettingsPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "ManusAI", "MEPBuriedDepthCalculator", "settings.xml");
+            "Hatco", "MEPBuriedDepthCalculator", "settings.xml");
 
         public static UserSettings Load()
         {

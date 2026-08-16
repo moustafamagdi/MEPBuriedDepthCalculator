@@ -164,9 +164,18 @@ namespace MEPBuriedDepthCalculator.UI
             {
                 AvailableLinks.Add(l);
             }
-            if (AvailableLinks.Count > 0 && SelectedLink == null)
+            if (AvailableLinks.Count > 0)
             {
-                SelectedLink = AvailableLinks[0];
+                if (SelectedLink == null)
+                {
+                    SelectedLink = AvailableLinks[0];
+                }
+                else
+                {
+                    // Re-match existing selection by InstanceId
+                    var matched = AvailableLinks.FirstOrDefault(l => l.InstanceId.Value == SelectedLink.InstanceId.Value);
+                    SelectedLink = matched ?? AvailableLinks[0];
+                }
             }
             _logger.Info("LinkSelection", $"Refreshed links list. Found {AvailableLinks.Count} links.");
         }
@@ -238,6 +247,12 @@ namespace MEPBuriedDepthCalculator.UI
                 return;
             }
 
+            var oldCursor = Mouse.OverrideCursor;
+            Mouse.OverrideCursor = Cursors.Wait;
+            try
+            {
+
+
             var options = new CalculationOptions
             {
                 SelectedLinkInstanceId = SelectedLink.InstanceId,
@@ -281,8 +296,13 @@ namespace MEPBuriedDepthCalculator.UI
                                $"Duration: {summary.Duration.TotalSeconds:F2}s\n\n" +
                                $"Detailed log saved to your Desktop.";
 
-            SummaryText = resultMsg;
-            TaskDialog.Show(Constants.AddInName, resultMsg);
+                SummaryText = resultMsg;
+                TaskDialog.Show(Constants.AddInName, resultMsg);
+            }
+            finally
+            {
+                Mouse.OverrideCursor = oldCursor;
+            }
         }
 
         protected void OnPropertyChanged(string name)

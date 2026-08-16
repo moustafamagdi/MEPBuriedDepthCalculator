@@ -27,14 +27,14 @@ namespace MEPBuriedDepthCalculator.Logging
                     Directory.CreateDirectory(desktopPath);
                 }
                 string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                _logFilePath = Path.Combine(desktopPath, $"MEPBuriedDepthCalculator_{timestamp}.log");
+                _logFilePath = Path.Combine(desktopPath, $"Hatco_MEPBuriedDepthCalculator_{timestamp}.log");
                 
                 WriteToFile($"[INFO] [Initialization] FileLogger initialized at {_logFilePath}. Version: {Constants.Version}");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to initialize FileLogger: {ex.Message}");
-                _logFilePath = Path.Combine(Path.GetTempPath(), $"MEPBuriedDepthCalculator_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+                _logFilePath = Path.Combine(Path.GetTempPath(), $"Hatco_MEPBuriedDepthCalculator_{DateTime.Now:yyyyMMdd_HHmmss}.log");
             }
         }
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using MEPBuriedDepthCalculator.Logging;
 using MEPBuriedDepthCalculator.Models;
 using MEPBuriedDepthCalculator.Utilities;
@@ -23,12 +25,14 @@ namespace MEPBuriedDepthCalculator.Services
         private readonly ILogger _logger;
         private readonly ToposolidService _toposolidService;
         private readonly BottomElevationService _bottomService;
+        private readonly SharedParameterService _paramService;
 
         public DepthCalculationService(ILogger logger)
         {
             _logger = logger;
             _toposolidService = new ToposolidService(logger);
             _bottomService = new BottomElevationService(logger);
+            _paramService = new SharedParameterService(logger);
         }
 
         public List<ElementCalculationResult> CalculateAndApply(Document doc, List<Element> elements, CalculationOptions options, out CalculationSummary summary)
@@ -42,22 +46,30 @@ namespace MEPBuriedDepthCalculator.Services
             int warningCount = 0;
             int errorCount = 0;
 
-            LinkedModelInfo selectedLink = null;
-            if (options.SelectedLinkInstanceId != null && options.SelectedLinkInstanceId != ElementId.InvalidElementId)
-            {
-                var linkService = new LinkedModelService(_logger);
-                var links = linkService.GetRevitLinks(doc);
-                selectedLink = links.Find(l => l.InstanceId == options.SelectedLinkInstanceId);
-            }
+            // 1. Get Selected Link
+            var linkService = new LinkedModelService(_logger);
+            var links = linkService.GetRevitLinks(doc);
+            var selectedLink = links.FirstOrDefault(l => l.InstanceId.Value == options.SelectedLinkInstanceId.Value);
 
             if (selectedLink == null || selectedLink.LinkedDocument == null)
             {
-                _logger.Error("CalculationEngine", "No valid Revit Link with Toposolids selected.");
+                _logger.Error("CalculationEngine", "Selected link or linked document is unavailable.");
                 stopwatch.Stop();
-                summary = new CalculationSummary { TotalSelected = elements.Count, Duration = stopwatch.Elapsed };
+                summary = new CalculationSummary { TotalSelected = elements.Count, Errors = elements.Count, Duration = stopwatch.Elapsed };
+                TaskDialog.Show(Constants.AddInName, "Error: The selected Revit Link is no longer available or is unloaded.");
                 return results;
             }
 
+            // 2. Initialize Toposolid Cache (Performance optimization)
+            _toposolidService.InitializeCache(selectedLink.LinkedDocument);
+
+            // 3. Auto-ensure shared parameters exist
+            if (!_paramService.EnsureSharedParametersExist(doc, out string paramMsg))
+            {
+                _logger.Warning("CalculationEngine", $"Parameter verification failed: {paramMsg}");
+            }
+
+            // 4. Calculation Phase
             foreach (var elem in elements)
             {
                 var elemResult = new ElementCalculationResult
@@ -69,12 +81,10 @@ namespace MEPBuriedDepthCalculator.Services
 
                 try
                 {
-                    // 1. Get LocationCurve
                     if (!(elem.Location is LocationCurve locCurve) || locCurve.Curve == null)
                     {
                         elemResult.Status = CalculationStatus.SkippedNoCurve;
                         skippedCount++;
-                        _logger.Info("EndpointCalculation", $"Element {elem.Id} skipped: No valid LocationCurve.");
                         results.Add(elemResult);
                         continue;
                     }
@@ -82,69 +92,54 @@ namespace MEPBuriedDepthCalculator.Services
                     XYZ startPoint = locCurve.Curve.GetEndPoint(0);
                     XYZ endPoint = locCurve.Curve.GetEndPoint(1);
 
-                    // 2. Check verticality
                     if (GeometryUtils.IsVertical(startPoint, endPoint))
                     {
                         elemResult.Status = CalculationStatus.SkippedVertical;
                         skippedCount++;
-                        _logger.Info("EndpointCalculation", $"Element {elem.Id} skipped: Element is vertical.");
                         results.Add(elemResult);
                         continue;
                     }
 
-                    // 3. Calculate Bottom Elevation and Ground Elevation for Start and End
                     var startDim = _bottomService.CalculateBottomElevation(elem, startPoint);
                     var endDim = _bottomService.CalculateBottomElevation(elem, endPoint);
-
                     elemResult.ElementSize = startDim.SizeValue;
 
-                    // Start endpoint calculation
-                    var startGround = _toposolidService.FindNearestUpperGround(selectedLink.LinkedDocument, selectedLink.Transform, startPoint, startDim.BottomElevation);
-                    var startEndpointRes = new EndpointCalculationResult
+                    // Start Point
+                    double? startGroundZ = _toposolidService.FindNearestUpperGround(startPoint, selectedLink.Transform);
+                    var startRes = new EndpointCalculationResult { HostPoint = startPoint, BottomElevation = startDim.BottomElevation };
+                    if (startGroundZ.HasValue)
                     {
-                        HostPoint = startPoint,
-                        BottomElevation = startDim.BottomElevation
-                    };
-
-                    if (startGround != null)
-                    {
-                        startEndpointRes.IsValid = true;
-                        startEndpointRes.GroundElevation = startGround.GroundElevation;
-                        startEndpointRes.SelectedToposolidId = startGround.ToposolidId;
-                        startEndpointRes.Depth = startGround.GroundElevation - startDim.BottomElevation;
+                        startRes.IsValid = true;
+                        startRes.GroundElevation = startGroundZ.Value;
+                        startRes.Depth = startGroundZ.Value - startDim.BottomElevation;
                     }
                     else
                     {
-                        startEndpointRes.IsValid = false;
-                        startEndpointRes.Warning = "No valid Toposolid surface found above start endpoint.";
+                        startRes.IsValid = false;
+                        startRes.Warning = "No valid Toposolid surface found above start endpoint.";
+                        warningCount++;
                     }
-                    elemResult.StartResult = startEndpointRes;
+                    elemResult.StartResult = startRes;
 
-                    // End endpoint calculation
-                    var endGround = _toposolidService.FindNearestUpperGround(selectedLink.LinkedDocument, selectedLink.Transform, endPoint, endDim.BottomElevation);
-                    var endEndpointRes = new EndpointCalculationResult
+                    // End Point
+                    double? endGroundZ = _toposolidService.FindNearestUpperGround(endPoint, selectedLink.Transform);
+                    var endRes = new EndpointCalculationResult { HostPoint = endPoint, BottomElevation = endDim.BottomElevation };
+                    if (endGroundZ.HasValue)
                     {
-                        HostPoint = endPoint,
-                        BottomElevation = endDim.BottomElevation
-                    };
-
-                    if (endGround != null)
-                    {
-                        endEndpointRes.IsValid = true;
-                        endEndpointRes.GroundElevation = endGround.GroundElevation;
-                        endEndpointRes.SelectedToposolidId = endGround.ToposolidId;
-                        endEndpointRes.Depth = endGround.GroundElevation - endDim.BottomElevation;
+                        endRes.IsValid = true;
+                        endRes.GroundElevation = endGroundZ.Value;
+                        endRes.Depth = endGroundZ.Value - endDim.BottomElevation;
                     }
                     else
                     {
-                        endEndpointRes.IsValid = false;
-                        endEndpointRes.Warning = "No valid Toposolid surface found above end endpoint.";
+                        endRes.IsValid = false;
+                        endRes.Warning = "No valid Toposolid surface found above end endpoint.";
+                        warningCount++;
                     }
-                    elemResult.EndResult = endEndpointRes;
+                    elemResult.EndResult = endRes;
 
                     processedCount++;
                     elemResult.Status = CalculationStatus.Success;
-
                     LogContext.LogElementCalculation(_logger, elemResult);
                 }
                 catch (Exception ex)
@@ -154,46 +149,32 @@ namespace MEPBuriedDepthCalculator.Services
                     elemResult.Errors.Add(ex.Message);
                     _logger.Error("CalculationEngine", $"Error calculating element {elem.Id}", ex, elem.Id.Value);
                 }
-
                 results.Add(elemResult);
             }
 
-            // Phase 2: Write valid results to parameters in a Revit Transaction
-            using (Transaction t = new Transaction(doc, "Calculate and Update MEP Buried Depths"))
+            // 5. Write Phase
+            using (Transaction t = new Transaction(doc, "Update MEP Buried Depths"))
             {
                 t.Start();
-
                 foreach (var res in results)
                 {
                     if (res.Status != CalculationStatus.Success) continue;
-
                     Element elem = doc.GetElement(res.ElementId);
                     if (elem == null) continue;
 
                     bool anyWritten = false;
-
-                    // Start Ground Elevation
                     if (res.StartResult != null && res.StartResult.IsValid)
                     {
-                        res.StartElevationUpdated = SetParameterValue(elem, Constants.ParamStartGroundElevation, res.StartResult.GroundElevation);
-                        res.StartDepthUpdated = SetParameterValue(elem, Constants.ParamStartDepth, res.StartResult.Depth);
-                        anyWritten = true;
+                        if (SetParameterValue(elem, Constants.ParamStartGroundElevation, res.StartResult.GroundElevation)) anyWritten = true;
+                        if (SetParameterValue(elem, Constants.ParamStartDepth, res.StartResult.Depth)) anyWritten = true;
                     }
-
-                    // End Ground Elevation
                     if (res.EndResult != null && res.EndResult.IsValid)
                     {
-                        res.EndElevationUpdated = SetParameterValue(elem, Constants.ParamEndGroundElevation, res.EndResult.GroundElevation);
-                        res.EndDepthUpdated = SetParameterValue(elem, Constants.ParamEndDepth, res.EndResult.Depth);
-                        anyWritten = true;
+                        if (SetParameterValue(elem, Constants.ParamEndGroundElevation, res.EndResult.GroundElevation)) anyWritten = true;
+                        if (SetParameterValue(elem, Constants.ParamEndDepth, res.EndResult.Depth)) anyWritten = true;
                     }
-
-                    if (anyWritten)
-                    {
-                        updatedCount++;
-                    }
+                    if (anyWritten) updatedCount++;
                 }
-
                 t.Commit();
             }
 
@@ -209,8 +190,7 @@ namespace MEPBuriedDepthCalculator.Services
                 Duration = stopwatch.Elapsed
             };
 
-            _logger.Info("Summary", $"Calculation completed. Total: {summary.TotalSelected}, Processed: {summary.Processed}, Updated: {summary.Updated}, Skipped: {summary.Skipped}, Errors: {summary.Errors}, Duration: {summary.Duration.TotalSeconds:F2}s");
-
+            _logger.Info("Summary", $"Completed: {summary.Updated} updated, {summary.Skipped} skipped, {summary.Errors} errors in {summary.Duration.TotalSeconds:F2}s");
             return results;
         }
 
@@ -222,17 +202,12 @@ namespace MEPBuriedDepthCalculator.Services
                 if (param != null && !param.IsReadOnly && param.StorageType == StorageType.Double)
                 {
                     param.Set(valueInFeet);
-                    _logger.Debug("ParameterWrite", $"Successfully wrote {paramName} = {valueInFeet:F4} to element {elem.Id}");
                     return true;
-                }
-                else
-                {
-                    _logger.Warning("ParameterWrite", $"Parameter '{paramName}' not found, read-only, or incompatible on element {elem.Id}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error("ParameterWrite", $"Failed to write parameter '{paramName}' on element {elem.Id}", ex, elem.Id.Value);
+                _logger.Error("ParameterWrite", $"Failed to write {paramName} to {elem.Id}", ex, elem.Id.Value);
             }
             return false;
         }
