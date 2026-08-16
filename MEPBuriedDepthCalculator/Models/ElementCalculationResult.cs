@@ -14,7 +14,7 @@ namespace MEPBuriedDepthCalculator.Models
 
     public class ElementCalculationResult
     {
-        public Autodesk.DB.ElementId ElementId { get; set; }
+        public ElementId ElementId { get; set; }
         public string CategoryName { get; set; }
         public string ElementTypeName { get; set; }
         public double ElementSize { get; set; }

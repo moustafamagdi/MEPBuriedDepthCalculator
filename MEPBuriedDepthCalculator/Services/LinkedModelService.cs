@@ -7,7 +7,7 @@ namespace MEPBuriedDepthCalculator.Services
 {
     public class LinkedModelInfo
     {
-        public Autodesk.DB.ElementId InstanceId { get; set; }
+        public ElementId InstanceId { get; set; }
         public string Name { get; set; }
         public RevitLinkInstance LinkInstance { get; set; }
         public Document LinkedDocument { get; set; }

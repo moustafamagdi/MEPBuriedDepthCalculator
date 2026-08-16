@@ -10,7 +10,7 @@ namespace MEPBuriedDepthCalculator.Services
 {
     public class GroundCandidate
     {
-        public Autodesk.DB.ElementId ToposolidId { get; set; }
+        public ElementId ToposolidId { get; set; }
         public double GroundElevation { get; set; }
     }
 
