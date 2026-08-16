@@ -175,16 +175,16 @@ namespace MEPBuriedDepthCalculator.Services
                     // Start Ground Elevation
                     if (res.StartResult != null && res.StartResult.IsValid)
                     {
-                        SetParameterValue(elem, Constants.ParamStartGroundElevation, res.StartResult.GroundElevation, ref res.StartElevationUpdated);
-                        SetParameterValue(elem, Constants.ParamStartDepth, res.StartResult.Depth, ref res.StartDepthUpdated);
+                        res.StartElevationUpdated = SetParameterValue(elem, Constants.ParamStartGroundElevation, res.StartResult.GroundElevation);
+                        res.StartDepthUpdated = SetParameterValue(elem, Constants.ParamStartDepth, res.StartResult.Depth);
                         anyWritten = true;
                     }
 
                     // End Ground Elevation
                     if (res.EndResult != null && res.EndResult.IsValid)
                     {
-                        SetParameterValue(elem, Constants.ParamEndGroundElevation, res.EndResult.GroundElevation, ref res.EndElevationUpdated);
-                        SetParameterValue(elem, Constants.ParamEndDepth, res.EndResult.Depth, ref res.EndDepthUpdated);
+                        res.EndElevationUpdated = SetParameterValue(elem, Constants.ParamEndGroundElevation, res.EndResult.GroundElevation);
+                        res.EndDepthUpdated = SetParameterValue(elem, Constants.ParamEndDepth, res.EndResult.Depth);
                         anyWritten = true;
                     }
 
@@ -214,7 +214,7 @@ namespace MEPBuriedDepthCalculator.Services
             return results;
         }
 
-        private void SetParameterValue(Element elem, string paramName, double valueInFeet, ref bool updatedFlag)
+        private bool SetParameterValue(Element elem, string paramName, double valueInFeet)
         {
             try
             {
@@ -222,8 +222,8 @@ namespace MEPBuriedDepthCalculator.Services
                 if (param != null && !param.IsReadOnly && param.StorageType == StorageType.Double)
                 {
                     param.Set(valueInFeet);
-                    updatedFlag = true;
                     _logger.Debug("ParameterWrite", $"Successfully wrote {paramName} = {valueInFeet:F4} to element {elem.Id}");
+                    return true;
                 }
                 else
                 {
@@ -234,6 +234,7 @@ namespace MEPBuriedDepthCalculator.Services
             {
                 _logger.Error("ParameterWrite", $"Failed to write parameter '{paramName}' on element {elem.Id}", ex, elem.Id.IntegerValue);
             }
+            return false;
         }
     }
 }

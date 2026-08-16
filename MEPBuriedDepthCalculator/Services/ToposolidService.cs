@@ -32,7 +32,7 @@ namespace MEPBuriedDepthCalculator.Services
                 // In Revit, linkTransform transforms from link coordinates to host coordinates.
                 // Therefore, to convert host point to link coordinates, we use linkTransform.Inverse.
                 Transform inverseTransform = linkTransform.Inverse;
-                XYZ linkPoint = inverseTransform.Point(hostPoint);
+                XYZ linkPoint = inverseTransform.OfPoint(hostPoint);
 
                 _logger.Debug("ToposolidGeometry", $"Host point Z={hostPoint.Z:F4} transformed to link point Z={linkPoint.Z:F4}");
 
@@ -53,7 +53,7 @@ namespace MEPBuriedDepthCalculator.Services
                             // Transform ground elevation back to host coordinates if necessary, or evaluate in host Z space.
                             // Since linkTransform handles vertical translation and scale (usually scale=1), we transform the point (linkPoint.X, linkPoint.Y, groundZ.Value) back to host coordinates.
                             XYZ linkGroundPoint = new XYZ(linkPoint.X, linkPoint.Y, groundZ.Value);
-                            XYZ hostGroundPoint = linkTransform.Point(linkGroundPoint);
+                            XYZ hostGroundPoint = linkTransform.OfPoint(linkGroundPoint);
 
                             // Only consider surfaces located ABOVE or at the MEP endpoint
                             if (hostGroundPoint.Z >= elementBottomZ - 1e-5)
@@ -102,7 +102,7 @@ namespace MEPBuriedDepthCalculator.Services
                     DetailLevel = ViewDetailLevel.Fine
                 };
 
-                GeometryElement geomElem = toposolidElem.GetGeometryObject(options);
+                GeometryElement geomElem = toposolidElem.get_Geometry(options);
                 if (geomElem == null) return null;
 
                 double? highestIntersectZ = null;

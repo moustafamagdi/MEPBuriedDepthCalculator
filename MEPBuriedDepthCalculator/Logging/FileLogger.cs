@@ -91,21 +91,26 @@ namespace MEPBuriedDepthCalculator.Logging
             LogMessage("FATAL", operation, sb.ToString().TrimEnd());
         }
 
-        private void LogMessage(string level, string operation, string message)
+        private void WriteToFile(string message)
         {
             try
             {
-                string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-                string line = $"[{timestamp}] [{level}] [{operation}] {message}";
                 lock (_lock)
                 {
-                    File.AppendAllText(_logFilePath, line + Environment.NewLine, Encoding.UTF8);
+                    File.AppendAllText(_logFilePath, message + Environment.NewLine, Encoding.UTF8);
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Logging failed: {ex.Message}");
             }
+        }
+
+        private void LogMessage(string level, string operation, string message)
+        {
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            string line = $"[{timestamp}] [{level}] [{operation}] {message}";
+            WriteToFile(line);
         }
     }
 }
