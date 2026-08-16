@@ -61,6 +61,7 @@ namespace MEPBuriedDepthCalculator.UI
         private string _summaryText = "Ready to calculate.";
         private bool _isBusy;
         private bool _parametersVerified;
+        private bool _isInitializing = true;
 
         public ObservableCollection<LinkedModelInfo> AvailableLinks { get; set; } = new ObservableCollection<LinkedModelInfo>();
         public ObservableCollection<ElementResultRow> ResultRows { get; set; } = new ObservableCollection<ElementResultRow>();
@@ -70,25 +71,25 @@ namespace MEPBuriedDepthCalculator.UI
         public bool IsCurrentSelection
         {
             get => _currentSelectionMode == SelectionMode.CurrentSelection;
-            set { if (value) { _currentSelectionMode = SelectionMode.CurrentSelection; NotifySelectionProperties(); SaveSettings(); } }
+            set { if (value) { _currentSelectionMode = SelectionMode.CurrentSelection; NotifySelectionProperties(); TrySaveSettings(); } }
         }
 
         public bool IsPickElements
         {
             get => _currentSelectionMode == SelectionMode.PickElements;
-            set { if (value) { _currentSelectionMode = SelectionMode.PickElements; NotifySelectionProperties(); SaveSettings(); } }
+            set { if (value) { _currentSelectionMode = SelectionMode.PickElements; NotifySelectionProperties(); TrySaveSettings(); } }
         }
 
         public bool IsCurrentView
         {
             get => _currentSelectionMode == SelectionMode.CurrentView;
-            set { if (value) { _currentSelectionMode = SelectionMode.CurrentView; NotifySelectionProperties(); SaveSettings(); } }
+            set { if (value) { _currentSelectionMode = SelectionMode.CurrentView; NotifySelectionProperties(); TrySaveSettings(); } }
         }
 
         public bool IsEntireModel
         {
             get => _currentSelectionMode == SelectionMode.EntireModel;
-            set { if (value) { _currentSelectionMode = SelectionMode.EntireModel; NotifySelectionProperties(); SaveSettings(); } }
+            set { if (value) { _currentSelectionMode = SelectionMode.EntireModel; NotifySelectionProperties(); TrySaveSettings(); } }
         }
 
         private void NotifySelectionProperties()
@@ -103,7 +104,7 @@ namespace MEPBuriedDepthCalculator.UI
         public LinkedModelInfo SelectedLink
         {
             get => _selectedLink;
-            set { _selectedLink = value; OnPropertyChanged(nameof(SelectedLink)); CommandManager.InvalidateRequerySuggested(); SaveSettings(); }
+            set { _selectedLink = value; OnPropertyChanged(nameof(SelectedLink)); CommandManager.InvalidateRequerySuggested(); TrySaveSettings(); }
         }
 
         public string ParameterStatusText
@@ -142,6 +143,8 @@ namespace MEPBuriedDepthCalculator.UI
 
             RefreshLinks();
             LoadSettings();
+            
+            _isInitializing = false; // Enable saving now that initial state is set
 
             RefreshLinksCommand = new RelayCommand(RefreshLinks);
             PickElementsCommand = new RelayCommand(() => _eventService.Run(PickElementsAction));
@@ -170,9 +173,27 @@ namespace MEPBuriedDepthCalculator.UI
 
             if (!string.IsNullOrEmpty(settings.LastSelectedLinkName))
             {
-                var link = AvailableLinks.FirstOrDefault(l => l.Name == settings.LastSelectedLinkName);
-                if (link != null) SelectedLink = link;
+                // Try to match by InstanceId first (more stable)
+                var link = AvailableLinks.FirstOrDefault(l => l.InstanceId.Value == settings.LastSelectedLinkInstanceId);
+                
+                // Fallback to name if ID didn't match
+                if (link == null)
+                {
+                    link = AvailableLinks.FirstOrDefault(l => l.Name == settings.LastSelectedLinkName);
+                }
+
+                if (link != null)
+                {
+                    _selectedLink = link;
+                    OnPropertyChanged(nameof(SelectedLink));
+                }
             }
+        }
+
+        private void TrySaveSettings()
+        {
+            if (_isInitializing) return;
+            SaveSettings();
         }
 
         private void SaveSettings()
@@ -194,8 +215,23 @@ namespace MEPBuriedDepthCalculator.UI
             var links = linkService.GetRevitLinks(_doc);
             foreach (var l in links) AvailableLinks.Add(l);
 
-            var rematch = previousInstanceId != null ? AvailableLinks.FirstOrDefault(l => l.InstanceId.Value == previousInstanceId.Value) : null;
-            SelectedLink = rematch ?? (AvailableLinks.Count > 0 ? AvailableLinks[0] : null);
+            if (previousInstanceId != null)
+            {
+                var rematch = AvailableLinks.FirstOrDefault(l => l.InstanceId.Value == previousInstanceId.Value);
+                if (rematch != null)
+                {
+                    _selectedLink = rematch;
+                    OnPropertyChanged(nameof(SelectedLink));
+                    return;
+                }
+            }
+
+            // If no previous selection or match, default to first available
+            if (AvailableLinks.Count > 0)
+            {
+                _selectedLink = AvailableLinks[0];
+                OnPropertyChanged(nameof(SelectedLink));
+            }
         }
 
         private bool EnsureParametersInternal(UIApplication uiapp, bool showDialogOnSuccess)
@@ -225,7 +261,6 @@ namespace MEPBuriedDepthCalculator.UI
                 var uidoc = uiapp.ActiveUIDocument;
                 var selectionService = new ElementSelectionService(_logger);
                 
-                // Hide window during pick
                 _window.Dispatcher.Invoke(() => _window.Hide());
                 
                 var pickedRefs = uidoc.Selection.PickObjects(ObjectType.Element, "Select MEP elements (Pipes, Ducts, Conduits)");
@@ -245,7 +280,6 @@ namespace MEPBuriedDepthCalculator.UI
             catch (Exception ex) { _logger.Error("Selection", "Error picking elements", ex); }
             finally
             {
-                // Show and activate window
                 _window.Dispatcher.Invoke(() => {
                     _window.Show();
                     _window.Activate();
