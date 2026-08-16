@@ -10,7 +10,7 @@ namespace MEPBuriedDepthCalculator.UI
         public MainWindow(Document doc, UIDocument uidoc, ILogger logger)
         {
             InitializeComponent();
-            DataContext = new MainViewModel(doc, uidoc, logger);
+            DataContext = new MainViewModel(doc, uidoc, logger, this);
         }
     }
 }

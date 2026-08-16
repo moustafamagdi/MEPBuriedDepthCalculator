@@ -21,6 +21,7 @@
         <GroupBox Grid.Row="1" Header="Element Selection Mode" Padding="10" Margin="0,0,0,10">
             <StackPanel>
                 <RadioButton Content="Current Selection" IsChecked="{Binding IsCurrentSelection}" Margin="0,2"/>
+                <RadioButton Content="Manually Picked" IsChecked="{Binding IsPickElements}" Margin="0,2"/>
                 <RadioButton Content="Current View" IsChecked="{Binding IsCurrentView}" Margin="0,2"/>
                 <RadioButton Content="Entire Model" IsChecked="{Binding IsEntireModel}" Margin="0,2"/>
             </StackPanel>
@@ -38,16 +39,9 @@
             </Grid>
         </GroupBox>
 
-        <!-- Options -->
-        <GroupBox Grid.Row="3" Header="Calculation &amp; Display Options" Padding="10" Margin="0,0,0,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Display Units:" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                <ComboBox Grid.Column="1" ItemsSource="{Binding AvailableUnits}" SelectedItem="{Binding SelectedUnit}" Height="26" VerticalContentAlignment="Center"/>
-            </Grid>
+        <!-- Selection Actions -->
+        <GroupBox Grid.Row="3" Header="Manual Selection" Padding="10" Margin="0,0,0,10">
+            <Button Content="Pick Elements from Revit" Command="{Binding PickElementsCommand}" Height="30"/>
         </GroupBox>
 
         <!-- Shared Parameters Status -->

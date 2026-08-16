@@ -34,9 +34,10 @@ To load the add-in into Revit 2024:
 1. Open your host Revit model containing the MEP elements (Pipes, Ducts, Conduits) and the linked site model containing the Toposolid Finished Ground.
 2. Go to the **Add-Ins** ribbon tab in Revit and click **MEP Buried Depth Calculator**.
 3. In the dialog:
-   * Select the element scope (Current Selection, Current View, or Entire Model).
+   * Select the element scope (Current Selection, Manually Picked, Current View, or Entire Model).
+   * Use **Pick Elements from Revit** to select specific elements manually after launching the tool.
    * Select the Revit Link containing the Toposolid ground.
    * Verify and bind Shared Parameters by clicking **Ensure Parameters**.
-   * Choose display units.
+
    * Click **Calculate & Update Depths**.
 4. Review the execution summary and check the generated timestamped log file on your Desktop for detailed diagnostics.
