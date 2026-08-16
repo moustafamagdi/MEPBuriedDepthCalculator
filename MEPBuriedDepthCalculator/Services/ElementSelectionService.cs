@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
@@ -16,7 +17,7 @@ namespace MEPBuriedDepthCalculator.Services
             _logger = logger;
         }
 
-        public List<Element> GetSelectedElements(Document doc, UIDocument uidoc, CalculationOptions options)
+        public List<Element> GetSelectedElements(Document doc, UIDocument uidoc, CalculationOptions options, List<ElementId> manualPickedIds = null)
         {
             var elements = new List<Element>();
             try
@@ -33,13 +34,22 @@ namespace MEPBuriedDepthCalculator.Services
                                 elements.Add(elem);
                             }
                         }
-                        _logger.Info("ElementSelection", $"Current Selection mode: Found {elements.Count} supported elements out of {selectedIds.Count} selected.");
+                        _logger.Info("ElementSelection", $"Current Selection mode: Found {elements.Count} supported elements.");
                         break;
 
                     case SelectionMode.PickElements:
-                        // Interactive pick not directly available in headless/non-interactive UI context without prompt,
-                        // but can use UIDoc selection or prompt. For WPF UI, we can use Selection.PickObjects if invoked from external command.
-                        _logger.Info("ElementSelection", "Pick Elements mode requested.");
+                        if (manualPickedIds != null && manualPickedIds.Count > 0)
+                        {
+                            foreach (var id in manualPickedIds)
+                            {
+                                var elem = doc.GetElement(id);
+                                if (IsSupportedElement(elem))
+                                {
+                                    elements.Add(elem);
+                                }
+                            }
+                        }
+                        _logger.Info("ElementSelection", $"Pick Elements mode: Found {elements.Count} supported elements.");
                         break;
 
                     case SelectionMode.CurrentView:
@@ -63,7 +73,7 @@ namespace MEPBuriedDepthCalculator.Services
                         break;
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 _logger.Error("ElementSelection", $"Error retrieving elements in mode {options.SelectionMode}", ex);
             }
@@ -74,11 +84,11 @@ namespace MEPBuriedDepthCalculator.Services
         public bool IsSupportedElement(Element elem)
         {
             if (elem == null || elem.Category == null) return false;
-            string catName = elem.Category.Name;
-            return catName == "Pipes" || catName == "Ducts" || catName == "Conduits" ||
-                   elem.Category.Id.Value == (long)BuiltInCategory.OST_PipeCurves ||
-                   elem.Category.Id.Value == (long)BuiltInCategory.OST_DuctCurves ||
-                   elem.Category.Id.Value == (long)BuiltInCategory.OST_Conduit;
+            
+            long catId = elem.Category.Id.Value;
+            return catId == (long)BuiltInCategory.OST_PipeCurves ||
+                   catId == (long)BuiltInCategory.OST_DuctCurves ||
+                   catId == (long)BuiltInCategory.OST_Conduit;
         }
 
         private ElementFilter GetSupportedCategoriesFilter()
